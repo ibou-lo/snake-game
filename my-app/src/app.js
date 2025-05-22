@@ -2,16 +2,27 @@
 
 // Wait for the DOM to load before running any code
 document.addEventListener('DOMContentLoaded', () => {
-    // Example welcome message and button (not part of the Snake game)
-    const appContainer = document.getElementById('app');
-    appContainer.innerHTML = '<h1>Welcome to My App</h1>';
+    // Add a Start Game button below the canvas
+    const startBtn = document.createElement('button');
+    startBtn.textContent = 'Start Game';
+    startBtn.id = 'startBtn';
+    document.body.insertBefore(startBtn, document.getElementById('score').nextSibling);
 
-    const button = document.createElement('button');
-    button.textContent = 'Click Me';
-    appContainer.appendChild(button);
+    // Disable arrow keys until game starts
+    let gameStarted = false;
 
-    button.addEventListener('click', () => {
-        alert('Button was clicked!');
+    // Listen for arrow key presses to change the snake's direction
+    document.addEventListener('keydown', function(event) {
+        if (gameStarted) changeDirection(event);
+    });
+
+    // Start the game when the button is clicked
+    startBtn.addEventListener('click', () => {
+        if (!gameStarted) {
+            startGame();
+            gameStarted = true;
+            startBtn.disabled = true;
+        }
     });
 });
 
@@ -39,9 +50,6 @@ let food = {
 let score = 0;
 let gameInterval;
 
-// Listen for arrow key presses to change the snake's direction
-document.addEventListener('keydown', changeDirection);
-
 // Change the direction of the snake based on user input
 function changeDirection(event) {
   if (event.key === 'ArrowLeft' && direction !== 'RIGHT') direction = 'LEFT';
@@ -50,10 +58,38 @@ function changeDirection(event) {
   else if (event.key === 'ArrowDown' && direction !== 'UP') direction = 'DOWN';
 }
 
+// Function to generate random obstacles
+function generateObstacles(count) {
+  const obs = [];
+  while (obs.length < count) {
+    // Generate random position
+    const x = Math.floor(Math.random() * (canvasSize / box)) * box;
+    const y = Math.floor(Math.random() * (canvasSize / box)) * box;
+    // Avoid placing on snake or food
+    const onSnake = snake.some(segment => segment.x === x && segment.y === y);
+    const onFood = (food.x === x && food.y === y);
+    const onObstacle = obs.some(o => o.x === x && o.y === y);
+    if (!onSnake && !onFood && !onObstacle) {
+      obs.push({ x, y });
+    }
+  }
+  return obs;
+}
+
+// Generate a set number of random obstacles at the start
+const obstacleCount = 5;
+let obstacles = generateObstacles(obstacleCount);
+
 // Main game loop: draws everything and updates the game state
 function draw() {
   // Clear the canvas for the new frame
   ctx.clearRect(0, 0, canvasSize, canvasSize);
+
+  // Draw obstacles
+  ctx.fillStyle = '#888'; // Gray color for obstacles
+  obstacles.forEach(obs => {
+    ctx.fillRect(obs.x, obs.y, box, box);
+  });
 
   // Draw the snake
   for (let i = 0; i < snake.length; i++) {
@@ -72,26 +108,36 @@ function draw() {
   if (direction === 'RIGHT') head.x += box;
   if (direction === 'DOWN') head.y += box;
 
+  // --- Replace wall collision check with wrap-around logic ---
+  head.x = (head.x + canvasSize) % canvasSize;
+  head.y = (head.y + canvasSize) % canvasSize;
+
   // Check if the snake eats the food
   if (head.x === food.x && head.y === food.y) {
     score++;
     document.getElementById('score').innerText = 'Score: ' + score;
-    // Place new food at a random position
-    food = {
-      x: Math.floor(Math.random() * (canvasSize / box)) * box,
-      y: Math.floor(Math.random() * (canvasSize / box)) * box
-    };
+    // Place new food at a random position, avoiding obstacles and snake
+    let newFood;
+    do {
+      newFood = {
+        x: Math.floor(Math.random() * (canvasSize / box)) * box,
+        y: Math.floor(Math.random() * (canvasSize / box)) * box
+      };
+    } while (
+      snake.some(segment => segment.x === newFood.x && segment.y === newFood.y) ||
+      obstacles.some(obs => obs.x === newFood.x && obs.y === newFood.y)
+    );
+    food = newFood;
     // Do not remove the tail (snake grows)
   } else {
     // Remove the tail (snake moves forward)
     snake.pop();
   }
 
-  // Check for collisions with walls or self
+  // Check for collisions with self or obstacles
   if (
-    head.x < 0 || head.x >= canvasSize || // Wall collision (left/right)
-    head.y < 0 || head.y >= canvasSize || // Wall collision (top/bottom)
-    snake.some(segment => segment.x === head.x && segment.y === head.y) // Self collision
+    snake.some(segment => segment.x === head.x && segment.y === head.y) || // Self collision
+    obstacles.some(obs => obs.x === head.x && obs.y === head.y) // Obstacle collision
   ) {
     clearInterval(gameInterval); // Stop the game loop
     alert('Game Over! Your score: ' + score); // Show game over message
@@ -107,6 +153,3 @@ function draw() {
 function startGame() {
   gameInterval = setInterval(draw, 100);
 }
-
-// Start the game when the script loads
-startGame();
